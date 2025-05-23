@@ -126,6 +126,7 @@ class NameSelector4(toga.App):
             HomophonesDict[key]=value
     
     def startup(self):
+        self._impl.create_menus = lambda *x, **y: None # 禁用菜单栏
         self.hwnd=None
         self.defaultFont=toga.Font(family='微软雅黑',size=20)
         """Construct and show the Toga application.
@@ -249,13 +250,16 @@ class NameSelector4(toga.App):
        
         self.main_window.size = (20,20)
         self.main_window.show()
-        #设置窗口无边框
+        
         self.hwnd = win32gui.FindWindow(None, self.main_window.title)
-        windowNoBorder(self.hwnd)
+        
         #设置窗口大小
         setWindowSize(self.hwnd,15,15)
+        self.main_window.size = (5,5)
         #设置窗口位置
         setWindowPos(self.hwnd,0.6)
+        #设置窗口无边框
+        windowNoBorder(self.hwnd)
 
 
 

@@ -13,7 +13,7 @@ formal_name = "NameSelector4"
 description = "aaaaa"
 long_description = """000000000000000000000
 """
-icon = "/icons/Slt"
+icon = "/icons/A"
 sources = [
     "src/nameselector4",
 ]
