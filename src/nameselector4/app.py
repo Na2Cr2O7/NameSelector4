@@ -24,7 +24,9 @@ import threading
 
 #hwnd = win32gui.FindWindow(None, windowName)
 
-
+PERCENT=.6
+ANIMATION_DURATION=.4
+ANIMATION_SPLIT=40
 def windowNoBorder(hwnd):
     """
     无边框窗口
@@ -33,24 +35,7 @@ def windowNoBorder(hwnd):
         style = win32gui.GetWindowLong(hwnd, win32con.GWL_STYLE)
         style &= ~win32con.WS_BORDER
         win32gui.SetWindowLong(hwnd, win32con.GWL_STYLE, style)
-def setWindowPos(hwnd,percentY):
-    """
-    设置窗口位置
-    (X一定为0，Y为屏幕高度的百分比)
-    """
-    if hwnd:
-        x, y, cx, cy = win32gui.GetWindowRect(hwnd)
-        screenHeight = win32api.GetSystemMetrics(1)
-        y = int(screenHeight*percentY)
-        win32gui.SetWindowPos(hwnd, win32con.HWND_TOPMOST, 0, y, cx, cy, 0)
-def setWindowSize(hwnd,width,height):
-    """
-    设置窗口大小
-    """
-    width=int(width)
-    height=int(height)
-    if hwnd:
-        win32gui.SetWindowPos(hwnd, win32con.HWND_TOPMOST, 0, 0, width, height, 0)
+
 def setWindowTransparancy(hwnd,alpha):
     """
     设置窗口透明度
@@ -61,23 +46,50 @@ def setWindowTransparancy(hwnd,alpha):
         extendedStyle = win32gui.GetWindowLong(hwnd, win32con.GWL_EXSTYLE)
         win32gui.SetWindowLong(hwnd, win32con.GWL_EXSTYLE, extendedStyle | win32con.WS_EX_LAYERED)
         win32gui.SetLayeredWindowAttributes(hwnd, win32api.RGB(0, 0, 0), alpha, win32con.LWA_ALPHA)
-def tweenTransparency(hwnd,startAlpha,endAlpha,split=10,duration=1):
+def easeInOutQuad(t, b, c, d):
     """
-    窗口透明度渐变
+    t: 当前时间
+    b: 起始值
+    c: 结束值与起始值的差
+    d: 持续时间
+    """
+    t /= d / 2
+    if t < 1:
+        return c / 2 * t * t + b
+    t -= 1
+    return -c / 2 * (t * (t - 2) - 1) + b
+def tween(hwnd,startPos,endPos,startAlpha,endAlpha,startSize,endSize,split=10,duration=1):
+    """
+    窗口位置、大小、透明度渐变
     duration为渐变时间
-    alpha为0~255
     """
     split=int(split)
-
     if hwnd:
-        increment=(endAlpha-startAlpha)/(duration*split)
+        incrementX=(endPos[0]-startPos[0])/(duration*split)
+        incrementY=(endPos[1]-startPos[1])/(duration*split)
+        incrementW=(endSize[0]-startSize[0])/(duration*split)
+        incrementH=(endSize[1]-startSize[1])/(duration*split)
+        incrementA=(endAlpha-startAlpha)/(duration*split)
+        incrementX=int(incrementX)
+        incrementY=int(incrementY)
+        incrementW=int(incrementW)
+        incrementH=int(incrementH)
+        incrementA=int(incrementA)
+
+
         for i in range(int(duration*split)):
-            alpha=startAlpha+i*increment
-            setWindowTransparancy(hwnd,alpha)
+            x=startPos[0]+i*incrementX
+            y=startPos[1]+i*incrementY
+            w=startSize[0]+i*incrementW
+            h=startSize[1]+i*incrementH
+            a=startAlpha+i*incrementA
+            # percent=i/split
+            win32gui.SetWindowPos(hwnd, win32con.HWND_TOPMOST, x, y, w, h, 0)
+            setWindowTransparancy(hwnd,a)
             time.sleep(duration/split)
-            
-            
+        win32gui.SetWindowPos(hwnd, win32con.HWND_TOPMOST, endPos[0], endPos[1], endSize[0], endSize[1], 0)
         setWindowTransparancy(hwnd,endAlpha)
+
 
 class windowStatus:
 
@@ -103,14 +115,16 @@ def speakThread():
             time.sleep(.01)
     return 123456756897
 threading.Thread(target=speakThread).start()
-
+def getScreenY():
+    screenHeight = win32api.GetSystemMetrics(1)
+    y = int(screenHeight*PERCENT)
+    return y
 
 class NameSelector4(toga.App):
     ws=windowStatus()
     nameList=[]
     nameListpop=[]
     HomophonesDict={}
-
     if not pathlib.Path('namelist.txt').exists():
         with open('namelist.txt','w',encoding='utf-8') as f:
             f.write('在这里添加名单\n每行一个名字')
@@ -141,10 +155,13 @@ class NameSelector4(toga.App):
             self.ws.currentStatus=num
             return self.ws
         def switchTo(self):
-            tweenTransparency(self.hwnd,255,0,20,.3)
+            y=getScreenY()
+            
+            tween(self.hwnd,(0,y),(-200,y),255,0,self.main_window.size,self.ws.windowSize,ANIMATION_SPLIT,ANIMATION_DURATION)
             self.main_window.content=self.ws.windowContent  
-            self.main_window.size=self.ws.windowSize
-            tweenTransparency(self.hwnd,0,255,20,.3)
+            
+            tween(self.hwnd,(-200,y),(0,y),0,255,self.ws.windowSize,self.ws.windowSize,ANIMATION_SPLIT,ANIMATION_DURATION)
+            
 
         def startButton_Click(widget):
             getWindowStatus(self,1)
@@ -190,7 +207,9 @@ class NameSelector4(toga.App):
                 await self.main_window.dialog(toga.ErrorDialog('错误',str(e)))
         def exitNameSelector4(widget):
             global speakThreadShouldClose
-            tweenTransparency(self.hwnd,255,0,20,.3)
+            
+            y=getScreenY()
+            tween(self.hwnd,(0,y),(-200,y),255,0,self.main_window.size,(0,0),ANIMATION_SPLIT,ANIMATION_DURATION)
             speakThreadShouldClose=True
             self.exit()
             
@@ -212,10 +231,14 @@ class NameSelector4(toga.App):
         buttonBox2.add(toga.Button('退出点名器',on_press=exitNameSelector4,style=Pack(padding=5,font_size=10)))
         EditBox.add(buttonBox2)
         EditorBox=toga.Box(style=Pack(direction=ROW))
+
+
         nameEditorBox=toga.Box(style=Pack(direction=COLUMN))
         nameEditorBox.add(toga.Label('名单编辑器',style=Pack(padding=5,font_size=15)))
         nameInput=toga.MultilineTextInput(value='\n'.join(self.nameList),style=Pack(padding=5,font_size=15,width=200,height=200),on_change=nameInput_Change)
         nameEditorBox.add(nameInput)
+
+
         HomophonesBox=toga.Box(style=Pack(direction=COLUMN))
         HomophonesBox.add(toga.Label('同音字编辑器',style=Pack(padding=5,font_size=15)))
         HomophonesInput=toga.MultilineTextInput(value='\n'.join([f'{key}:{value}' for key,value in self.HomophonesDict.items()]),on_change=HomophonesInput_Change,style=Pack(padding=5,font_size=15,width=200,height=200))
@@ -253,13 +276,15 @@ class NameSelector4(toga.App):
         
         self.hwnd = win32gui.FindWindow(None, self.main_window.title)
         
-        #设置窗口大小
-        setWindowSize(self.hwnd,15,15)
-        self.main_window.size = (5,5)
-        #设置窗口位置
-        setWindowPos(self.hwnd,0.6)
+        # 设置窗口位置
+        # setWindowPos(self.hwnd,PERCENT)
         #设置窗口无边框
+        
+        #设置窗口大小
+        Y=getScreenY()
+        tween(self.hwnd,(0,Y),(-200,Y),255,0,(0,0),self.ws.windowSize,1,.1)
         windowNoBorder(self.hwnd)
+        tween(self.hwnd,(-200,Y),(0,Y),0,255,self.ws.windowSize,(0,0),ANIMATION_SPLIT,ANIMATION_DURATION)
 
 
 
